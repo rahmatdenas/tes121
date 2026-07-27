@@ -826,6 +826,13 @@ function activateMapMarker(qid) {
     try {
       Map.closePopup();
 
+      // +++ SATPAM SUPER KETAT: CEK KTP LEAFLET (_leaflet_id) +++
+      // Cegah error 'Cannot use in operator' jika marker keburu dihapus/dihancurkan filter
+      if (!record.mapMarker || typeof record.mapMarker._leaflet_id === 'undefined') {
+        console.warn(`[Guard] Marker ${qid} sudah menjadi hantu (terhapus filter). Penerbangan dibatalkan.`);
+        return;
+      }
+
       let countSameLocation = 0;
       currentFilteredRecords.forEach(r => {
         if (r.lat === record.lat && r.lon === record.lon) {
@@ -838,11 +845,15 @@ function activateMapMarker(qid) {
         Map.setView([record.lat, record.lon], TILE_LAYER_MAX_ZOOM);
         setTimeout(() => {
           if (window.location.hash !== '#' + qid) return;
+          
+          // Cek hantu lagi sebelum menyentuh DOM ikon klaster
+          if (!record.mapMarker || typeof record.mapMarker._leaflet_id === 'undefined') return;
+
           let visibleParent = Cluster.getVisibleParent(record.mapMarker);
           if (visibleParent && visibleParent._icon) {
             visibleParent._icon.classList.add('cluster-efek-denyut');
             setTimeout(() => {
-              if (visibleParent._icon) visibleParent._icon.classList.remove('cluster-efek-denyut');
+              if (visibleParent && visibleParent._icon) visibleParent._icon.classList.remove('cluster-efek-denyut');
             }, 4500);
           }
         }, 350);
@@ -875,7 +886,7 @@ function activateMapMarker(qid) {
       // Menangkap error agar tidak membuat aplikasi crash
       console.error(`[STORY-3] Sistem meredam crash:`, error);
     }
-  }, 250); // <--- Inilah penutup timer 250 milidetik itu!
+  }, 250);
 }
 	
 function displayPanelContent(id) {
