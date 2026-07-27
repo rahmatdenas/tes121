@@ -999,6 +999,10 @@ function updateFeatureCounts(totalValidRecords) {
 function applyIntersectionFilter(preventZoom = false) {
   if (!PrimaryDataIsLoaded) return;
 if (Map) Map.stop();
+  // 2. +++ TAMBAHAN BARU: Bunuh timer terbang dari sidebar jika sedang berjalan +++
+  if (typeof flightDebounceToken !== 'undefined' && flightDebounceToken) {
+    clearTimeout(flightDebounceToken);
+  }
   Cluster.clearLayers();
   let ol = document.getElementById('index-list');
   ol.innerHTML = '';
