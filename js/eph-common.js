@@ -812,23 +812,16 @@ if (logoBranding) {
 function activateMapMarker(qid) {
   let record = Records[qid];
 
-  // 1. Guard Clause Dasar: Pastikan data & marker eksis
-  if (!record || !record.mapMarker) {
-    console.warn(`[Guard] Arsip ${qid} tidak memiliki marker.`);
-    return;
-  }
+  // 1. Pastikan data dan marker ada
+  if (!record || !record.mapMarker) return;
+  
+  // 2. Abaikan jika popup sudah terbuka
+  if (record.popup && record.popup.isOpen()) return;
 
-  // Abaikan jika popup sudah terbuka sempurna
-  if (record.popup && record.popup.isOpen()) {
-    return;
-  }
+  // 3. Matikan "bom waktu" (debounce) jika user klik beruntun
+  if (flightDebounceToken) clearTimeout(flightDebounceToken);
 
-  // 2. Teknik Debounce: Batalkan jadwal terbang sebelumnya jika user melakukan spam klik
-  if (flightDebounceToken) {
-    clearTimeout(flightDebounceToken);
-  }
-
-  // Tunda penerbangan selama 250ms. Peta baru akan terbang merespons klik yang paling akhir.
+  // 4. Pasang "bom waktu" baru selama 250ms
   flightDebounceToken = setTimeout(() => {
     try {
       Map.closePopup();
@@ -840,6 +833,7 @@ function activateMapMarker(qid) {
         }
       });
 
+      // Kasus khusus: Titik yang menumpuk > 60 di satu tempat persis
       if (countSameLocation > 60) {
         Map.setView([record.lat, record.lon], TILE_LAYER_MAX_ZOOM);
         setTimeout(() => {
@@ -852,45 +846,36 @@ function activateMapMarker(qid) {
             }, 4500);
           }
         }, 350);
-      } else {
+      } 
+      // Kasus Normal: Terbang ke klaster
+      else {
         
-        // 3. Guard Clause Ekstra: Pastikan marker punya induk di dalam cluster sebelum terbang
-        let visibleParent = Cluster.getVisibleParent(record.mapMarker);
-
-        if (!visibleParent || !Cluster.hasLayer(record.mapMarker)) {
-          // Jika tersembunyi (misal direnggut tiba-tiba oleh filter), lompat instan tanpa animasi
-          console.warn(`[Guard] Marker ${qid} di luar jangkauan cluster. Lompat seketika.`);
+        // SATPAM 1: Cek dari memori (Bukan dari layar)
+        if (!Cluster.hasLayer(record.mapMarker)) {
+          console.warn(`[Guard] Marker ${qid} terhapus dari memori. Lompat seketika.`);
           Map.setView([record.lat, record.lon], TILE_LAYER_MAX_ZOOM, { animate: false });
           if (!record.popup.isOpen()) record.mapMarker.openPopup();
           return;
         }
 
-        // Hentikan paksa momentum pergerakan/animasi peta sebelumnya agar tidak tabrakan
-        Map.stop();
-
-        const waktuMulai = performance.now();
-        console.log(`[STORY-1] 🎬 Detik ${Math.round(waktuMulai)}: Memulai zoomToShowLayer untuk arsip ${qid}...`);
-
+        // Terbang dan urai klaster secara natural
         Cluster.zoomToShowLayer(
           record.mapMarker,
           function() {
-            const waktuSelesai = performance.now();
-            console.log(`[STORY-2] 🏁 Detik ${Math.round(waktuSelesai)}: Animasi selesai. Membuka popup...`);
-
-            // 4. Post-Flight Check: Pastikan user belum klik arsip lain selama animasi berjalan (delay ~500ms)
+            // SATPAM 2: Cek apakah user bajak tujuan saat kamera sedang di udara
             if (window.location.hash !== '#' + qid) {
-              console.warn(`[Batal] User sudah klik arsip lain. Abaikan pembukaan popup ${qid}.`);
-              return;
+               console.warn(`[Batal] User sudah klik arsip lain. Abaikan pembukaan popup ${qid}.`);
+               return;
             }
-
             if (!record.popup.isOpen()) record.mapMarker.openPopup();
           }
         );
       }
     } catch (error) {
-      console.error(`[STORY-3] 💥 Sistem berhasil meredam potensi crash! Jejak:`, error);
+      // Menangkap error agar tidak membuat aplikasi crash
+      console.error(`[STORY-3] Sistem meredam crash:`, error);
     }
-  }, 250); // 250ms adalah jeda bernapas yang ideal untuk sistem spasial
+  }, 250); // <--- Inilah penutup timer 250 milidetik itu!
 }
 	
 function displayPanelContent(id) {
