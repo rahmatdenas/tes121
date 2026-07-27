@@ -35,6 +35,7 @@ var isRevertingHash = false;
 var loadingTimeoutToken = null;
 var searchDebounceToken = null;
 var renderTimeoutToken = null;
+var flightDebounceToken = null;
 
 // =========================================================
 // FUNGSI DIALOG KUSTOM (Pengganti alert & confirm)
@@ -810,63 +811,86 @@ if (logoBranding) {
 
 function activateMapMarker(qid) {
   let record = Records[qid];
-  if (!record.mapMarker) return; 
 
+  // 1. Guard Clause Dasar: Pastikan data & marker eksis
+  if (!record || !record.mapMarker) {
+    console.warn(`[Guard] Arsip ${qid} tidak memiliki marker.`);
+    return;
+  }
+
+  // Abaikan jika popup sudah terbuka sempurna
   if (record.popup && record.popup.isOpen()) {
     return;
   }
 
-  try {
-    Map.closePopup();
+  // 2. Teknik Debounce: Batalkan jadwal terbang sebelumnya jika user melakukan spam klik
+  if (flightDebounceToken) {
+    clearTimeout(flightDebounceToken);
+  }
 
-    let countSameLocation = 0;
-    currentFilteredRecords.forEach(r => {
-      if (r.lat === record.lat && r.lon === record.lon) {
-        countSameLocation++;
-      }
-    });
+  // Tunda penerbangan selama 250ms. Peta baru akan terbang merespons klik yang paling akhir.
+  flightDebounceToken = setTimeout(() => {
+    try {
+      Map.closePopup();
 
-    if (countSameLocation > 60) {
-      Map.setView([record.lat, record.lon], TILE_LAYER_MAX_ZOOM);
-      setTimeout(() => {
-        if (window.location.hash !== '#' + qid) return;
-        let visibleParent = Cluster.getVisibleParent(record.mapMarker);
-        if (visibleParent && visibleParent._icon) {
-          visibleParent._icon.classList.add('cluster-efek-denyut');
-          setTimeout(() => {
-            if (visibleParent._icon) visibleParent._icon.classList.remove('cluster-efek-denyut');
-          }, 4500);
+      let countSameLocation = 0;
+      currentFilteredRecords.forEach(r => {
+        if (r.lat === record.lat && r.lon === record.lon) {
+          countSameLocation++;
         }
-      }, 350);
-    } else {
-      if (Cluster.hasLayer(record.mapMarker)) {
+      });
+
+      if (countSameLocation > 60) {
+        Map.setView([record.lat, record.lon], TILE_LAYER_MAX_ZOOM);
+        setTimeout(() => {
+          if (window.location.hash !== '#' + qid) return;
+          let visibleParent = Cluster.getVisibleParent(record.mapMarker);
+          if (visibleParent && visibleParent._icon) {
+            visibleParent._icon.classList.add('cluster-efek-denyut');
+            setTimeout(() => {
+              if (visibleParent._icon) visibleParent._icon.classList.remove('cluster-efek-denyut');
+            }, 4500);
+          }
+        }, 350);
+      } else {
         
-        // [STORY-1] CCTV 1: Mulai terbang
+        // 3. Guard Clause Ekstra: Pastikan marker punya induk di dalam cluster sebelum terbang
+        let visibleParent = Cluster.getVisibleParent(record.mapMarker);
+
+        if (!visibleParent || !Cluster.hasLayer(record.mapMarker)) {
+          // Jika tersembunyi (misal direnggut tiba-tiba oleh filter), lompat instan tanpa animasi
+          console.warn(`[Guard] Marker ${qid} di luar jangkauan cluster. Lompat seketika.`);
+          Map.setView([record.lat, record.lon], TILE_LAYER_MAX_ZOOM, { animate: false });
+          if (!record.popup.isOpen()) record.mapMarker.openPopup();
+          return;
+        }
+
+        // Hentikan paksa momentum pergerakan/animasi peta sebelumnya agar tidak tabrakan
+        Map.stop();
+
         const waktuMulai = performance.now();
         console.log(`[STORY-1] 🎬 Detik ${Math.round(waktuMulai)}: Memulai zoomToShowLayer untuk arsip ${qid}...`);
 
         Cluster.zoomToShowLayer(
           record.mapMarker,
           function() {
-            // [STORY-2] CCTV 2: Berhasil mendarat tanpa interupsi
             const waktuSelesai = performance.now();
-            console.log(`[STORY-2] 🏁 Detik ${Math.round(waktuSelesai)}: Animasi selesai. Membuka popup... (Lama perjalanan: ${Math.round(waktuSelesai - waktuMulai)}ms)`);
+            console.log(`[STORY-2] 🏁 Detik ${Math.round(waktuSelesai)}: Animasi selesai. Membuka popup...`);
 
-            if (window.location.hash !== '#' + qid) return;
+            // 4. Post-Flight Check: Pastikan user belum klik arsip lain selama animasi berjalan (delay ~500ms)
+            if (window.location.hash !== '#' + qid) {
+              console.warn(`[Batal] User sudah klik arsip lain. Abaikan pembukaan popup ${qid}.`);
+              return;
+            }
+
             if (!record.popup.isOpen()) record.mapMarker.openPopup();
           }
         );
-      } else {
-        Map.setView([record.lat, record.lon], TILE_LAYER_MAX_ZOOM, { animate: false });
-        if (!record.popup.isOpen()) record.mapMarker.openPopup();
       }
+    } catch (error) {
+      console.error(`[STORY-3] 💥 Sistem berhasil meredam potensi crash! Jejak:`, error);
     }
-  } catch (error) {
-    // [STORY-3] CCTV 3: Tangkap momen saat crash terjadi
-    const waktuCrash = performance.now();
-    console.error(`[STORY-3] 💥 Detik ${Math.round(waktuCrash)}: CRASH TERJADI SAAT TERBANG!`);
-    console.warn("Jejak error:", error);
-  }
+  }, 250); // 250ms adalah jeda bernapas yang ideal untuk sistem spasial
 }
 	
 function displayPanelContent(id) {
