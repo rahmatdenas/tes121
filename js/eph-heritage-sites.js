@@ -998,7 +998,7 @@ function updateFeatureCounts(totalValidRecords) {
 
 function applyIntersectionFilter(preventZoom = false) {
   if (!PrimaryDataIsLoaded) return;
-
+if (Map) Map.stop();
   Cluster.clearLayers();
   let ol = document.getElementById('index-list');
   ol.innerHTML = '';
