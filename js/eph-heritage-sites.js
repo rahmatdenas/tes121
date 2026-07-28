@@ -893,6 +893,24 @@ function generateFilterSelect() {
   
   if (!isFilterEventAttached) {
     selectRegion.addEventListener('change', function() {
+      // ========================================================
+      // 🛑 REM DARURAT: Hancurkan proses GPS yang sedang berjalan
+      // ========================================================
+      if (window.TombolGPSMap) window.TombolGPSMap.stop();
+      Map.off('locationfound');
+      Map.off('locationerror');
+      
+      if (userRadiusCircle) {
+        Map.removeLayer(userRadiusCircle);
+        userRadiusCircle = null;
+      }
+      
+      // Kembalikan teks opsi jika sebelumnya nyangkut di "⏳ Mencari..."
+      let opsiTerdekat = Array.from(this.options).find(opt => opt.value === 'terdekat');
+      if (opsiTerdekat) opsiTerdekat.text = "Sekitar Anda (Radius 10 km)";
+      // ========================================================
+
+      // Baru jalankan logika sesuai pilihan
       if (this.value === 'terdekat') {
         jalankanFilterGPS(this);
       } else {
