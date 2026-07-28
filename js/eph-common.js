@@ -109,6 +109,49 @@ window.konfirmasiBerhenti = function() {
     });
 };
 
+// ========================================================
+// 🛡️ JARING PENGAMAN GLOBAL (FOKUS: LEAFLET CRASH & STORY-3)
+// ========================================================
+let sedangCrash = false; // Penjaga agar dialog tidak muncul berkali-kali
+
+window.addEventListener('error', function(event) {
+  // Abaikan eror dari ekstensi browser
+  if (event.filename && !event.filename.includes(window.location.hostname) && window.location.hostname !== '') {
+      return false; 
+  }
+  
+  // FILTER SUPER KETAT: Hanya tangkap jika erornya tentang "_leaflet_id" (Uncaught TypeError)
+  let pesan = event.message ? event.message.toString() : "";
+  if (pesan.includes('_leaflet_id')) {
+      picuLayarCrash(pesan);
+  }
+});
+
+// Catatan: 'unhandledrejection' sengaja DIHAPUS agar eror fetch/gambar tidak memicu dialog ini.
+
+function picuLayarCrash(pesanEror) {
+  if (sedangCrash) return;
+  sedangCrash = true;
+
+  // Sembunyikan pesan loading di sidebar jika sedang berjalan
+  let progressText = document.querySelector('#index-list p');
+  if (progressText) progressText.innerHTML = '';
+
+  // Rapikan pesan eror agar tidak terlalu panjang
+  let teksLog = pesanEror ? String(pesanEror).substring(0, 100) : 'Unknown Error';
+
+  let pesanDialog = `Maaf, terjadi kesalahan sistem yang tidak terduga saat merender peta.<br>
+                     <span style="font-family: monospace; font-size: 11px; color: #888;">Log: ${teksLog}...</span><br>
+                     Klik <b>Tutup</b> untuk memuat ulang aplikasi dan memulihkan sistem.`;
+
+  // Panggil fungsi dialog kustom andalan Anda!
+  tampilkanDialog(pesanDialog, "alert", "Aplikasi Mengalami Kendala")
+    .then(() => {
+      // Hard reload! Kembali ke beranda murni
+      window.location.href = window.location.pathname;
+    });
+}
+
 const ikonTetesanAir = L.divIcon({
   className: 'ikon-marker-ringan',
   html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-14 -13 412 538" width="30" height="40" style="overflow: visible;">
@@ -885,6 +928,9 @@ function activateMapMarker(qid) {
     } catch (error) {
       // Menangkap error agar tidak membuat aplikasi crash
       console.error(`[STORY-3] Sistem meredam crash:`, error);
+		// Panggil Layar Crash secara manual karena eror ini sudah ditangkap (tidak akan memicu window.error)
+      if (typeof picuLayarCrash === 'function') {
+         picuLayarCrash(error.message);
     }
   }, 250);
 }
