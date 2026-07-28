@@ -932,6 +932,7 @@ function activateMapMarker(qid) {
       if (typeof picuLayarCrash === 'function') {
          picuLayarCrash(error.message);
     }
+	}
   }, 250);
 }
 	
